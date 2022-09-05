@@ -11,7 +11,7 @@
 
 <meta name="author" content="Rachel Bryant" />
 
-<meta name="date" content="2022-09-02" />
+<meta name="date" content="2022-09-05" />
 
 <title>Exploratory Keyword Extraction Methods</title>
 
@@ -361,12 +361,30 @@ pre code {
 
 <h1 class="title toc-ignore">Exploratory Keyword Extraction Methods</h1>
 <h4 class="author">Rachel Bryant</h4>
-<h4 class="date">2022-09-02</h4>
+<h4 class="date">2022-09-05</h4>
 
 </div>
 
 
 <p>I’m copying from Joni’s initial keyword extraction code from <a href="https://github.com/DARIAH-FI-Survey-Concept-Network/HS-loneliness-survey/blob/main/survey-responses_with_code.html">here</a></p>
+<pre class="r"><code>library(tidyverse) # use tidyverse packages
+library(tidytext) # text mining tools for tidyverse
+library(udpipe) # for conllu data
+library(tm) # other text mining tool package
+library(wordcloud) # visualize word clouds
+library(RColorBrewer) # for color paletter
+library(ggraph) # visualize network
+library(igraph) # visualize networks
+library(data.table) # data manipulation (from a  copypasted example)</code></pre>
+<pre class="r"><code>tbl.raw &lt;- read.csv(&quot;HS-loneliness-survey/data/Study/Data/daF3360.csv&quot;, sep = &quot;;&quot;, encoding=&quot;UTF-8&quot;) %&gt;%
+  mutate(q9 = trimws(q9),
+         q18 = ifelse(q18 == &quot; &quot;, NA, q18)) %&gt;% # remove white space
+  mutate_all(na_if, &quot;&quot;) %&gt;% # replace empty string with NA 
+  mutate(q18 = as.numeric(q18)) # convert empty string to NA or numeric</code></pre>
+<pre class="r"><code>tbl &lt;-  tbl.raw%&gt;% 
+  mutate(grp = ifelse(!is.na(q9), &quot;Yes&quot;, &quot;No&quot;), # add an indicator based on if the respondent replied to open-ended questions
+         n_words = str_count(q9, &quot;\\w+&quot;), # add word count columns
+         n_chars = nchar(q9)) # add character count column</code></pre>
 <div id="preprocessing" class="section level2">
 <h2>Preprocessing</h2>
 <div id="lemmatizing-with-turku-neural-parser" class="section level3">
@@ -378,6 +396,20 @@ which can be loaded access a data frame in R using package <a href="https://cran
 The parser is also available in CSC’s computing environments.</p>
 <p>Prepare text responses in text file format to process the data
 externally.</p>
+<pre class="r"><code>tbl.text_export &lt;- tbl %&gt;%
+  select(fsd_id, q9) %&gt;%
+  mutate(conllu_id = row_number()) # add paragraph_id for parsing
+
+#writeLines(tbl.text_export$q9, &quot;hs2014_q9.txt&quot;, sep = &quot;\n\n&quot;) # add double line breaks as then Neural Parser will consider each response as a paragraph</code></pre>
+<pre class="r"><code>#convert txt to conllu file needed by rest of code.
+
+#path &lt;- udpipe_download_model(language = &quot;finnish-ftb&quot;) #download finnish language pack
+#model &lt;- udpipe_load_model(path) #converts it to a model needed by udpipe_annotate
+#x &lt;- as.data.frame(udpipe_annotate(model, as.character(tbl.text_export$q9)))
+
+#conllu &lt;- as_conllu(x)
+
+#cat(conllu, file = file(&quot;hs2014_q9.conllu&quot;, encoding = &quot;UTF-8&quot;))</code></pre>
 <p>Example of CoNLL-U data imported to R data.frame:</p>
 <pre class="r"><code>tbl.annotated_neural_parser &lt;- udpipe_read_conllu(&quot;HS-loneliness-survey/hs2014_q9.conllu&quot;) %&gt;%
   mutate(sentence_id = as.numeric(sentence_id)) %&gt;%
@@ -456,6 +488,14 @@ how many times it co-occurs with other words</li>
 many times it co-occurs with other words) to the word frequency x§ - a
 RAKE score for the full candidate keyword is calculated by summing up
 the scores of each of the words which define the candidate keyword</p>
+<pre class="r"><code>keywords.rake &lt;- keywords_rake(tbl.annotated_neural_parser, 
+                               term = &quot;lemma&quot;, 
+                               group = c(&quot;doc_id&quot;, &quot;sentence_id&quot;),
+                               #relevant = tbl.text$xpos %in% c(&quot;A&quot;, &quot;N&quot;, &quot;V&quot;),
+                               ngram_max = 5, 
+                               n_min = 2)
+
+head(keywords.rake)</code></pre>
 <pre><code>##                       keyword ngram freq     rake
 ## 1    ei koe olla yksinäinen .     5    2 69.05640
 ## 2          ei haluta kertoa .     4    2 61.24195
@@ -488,6 +528,23 @@ word.</p>
 frequently-occurring (less meaningful) words.</p>
 <p>The tidytext library can create a tf-idf for each response as its own
 document, but I used the Turku Neural Parser object.</p>
+<pre class="r"><code>#text_words &lt;- tbl.text_export %&gt;% 
+#  unnest_tokens(output = word, input = q9) %&gt;%
+#  count(fsd_id, word, sort = TRUE)
+
+text_words &lt;- tbl.annotated_neural_parser %&gt;%
+  filter(sentence != &quot;NA&quot;) %&gt;% #only responses with answers
+  select(doc_id, token) %&gt;%
+  count(doc_id, token, sort = TRUE)
+
+text_tf_idf &lt;- text_words %&gt;%
+  bind_tf_idf(term = token, document = doc_id, n)
+
+#remove rows with special characters and numbers. Should I do this?
+text_tf_idf &lt;- text_tf_idf %&gt;% 
+  filter(grepl(&#39;^[a-zA-ZäöüÄÖÜ]&#39;, token))
+
+text_tf_idf %&gt;% arrange(doc_id) %&gt;% head()</code></pre>
 <pre><code>##   doc_id     token n         tf       idf     tf_idf
 ## 1      3        ja 3 0.04109589 0.8932133 0.03670740
 ## 2      3        ei 2 0.02739726 1.0448014 0.02862470
@@ -496,10 +553,21 @@ document, but I used the Turku Neural Parser object.</p>
 ## 5      3        et 2 0.02739726 4.7906477 0.13125062
 ## 6      3 kavereita 2 0.02739726 4.2459205 0.11632659</code></pre>
 <p>n unique words across all responses:</p>
+<pre class="r"><code>#n unique words in responses
+
+n_distinct(text_words$token, na.rm = FALSE)</code></pre>
 <pre><code>## [1] 18292</code></pre>
 <p>Average word count for each response (excluding NAs):</p>
+<pre class="r"><code>#average word count for each response with value
+wordCount &lt;- text_words %&gt;% 
+  group_by(doc_id) %&gt;% 
+  summarise(wordCount = sum(n))
+
+mean(wordCount$wordCount)</code></pre>
 <pre><code>## [1] 29.95875</code></pre>
 <p>Let’s look at terms with high tf-idf across all documents.</p>
+<pre class="r"><code>text_tf_idf %&gt;%
+  arrange(desc(tf_idf)) %&gt;% head(10)</code></pre>
 <pre><code>##    doc_id                 token n tf      idf   tf_idf
 ## 1       5               kakalta 1  1 8.157944 8.157944
 ## 2     289 Ylitsepääsemättömältä 1  1 8.157944 8.157944
@@ -518,6 +586,14 @@ include some not helpful words like “among other things), it may be that
 the tf-idf is more appropriate for the stem or lemma forms.</p>
 <p>Then I select at the keywords from the <em>n=5</em> words with the
 highest tf-idf values in each document.</p>
+<pre class="r"><code>tf_idf_top_5 &lt;- text_tf_idf %&gt;%
+  group_by(doc_id) %&gt;%
+  slice_max(order_by = tf_idf, n = 5) %&gt;%
+  mutate(tfidf_keywords = paste0(token, &quot;, &quot;, collapse = &quot;&quot;)) %&gt;%
+  select(doc_id, tfidf_keywords) %&gt;%
+  filter(row_number()==1)
+
+head(tf_idf_top_5, n=10)</code></pre>
 <pre><code>## # A tibble: 10 x 2
 ## # Groups:   doc_id [10]
 ##    doc_id tfidf_keywords                                                        
@@ -544,6 +620,19 @@ words from the document.</p>
 <p>I repeat the process with n-grams instead of individual word
 tokens.</p>
 <p>Some bigrams for document 3:</p>
+<pre class="r"><code>text_2grams &lt;- tbl.text_export %&gt;% 
+  unnest_ngrams(output = token, input = q9, n=2) %&gt;%
+  count(fsd_id, token, sort = TRUE)
+
+text_2gram_tfidf &lt;- text_2grams %&gt;%
+  bind_tf_idf(term = token, document = fsd_id, n)
+
+#remove rows with special characters and numbers. Should I do this?
+text_2gram_tfidf &lt;- text_2gram_tfidf %&gt;% 
+  filter(grepl(&#39;^[a-zA-ZäöüÄÖÜ]&#39;, token))
+
+text_2gram_tfidf %&gt;%
+  arrange(fsd_id, desc(tf_idf)) %&gt;% head(10)</code></pre>
 <pre><code>##    fsd_id                 token n       tf      idf   tf_idf
 ## 1       3                 et ei 2 0.031250 10.23462 0.319832
 ## 2       3 ajattelemaan maailman 1 0.015625 10.23462 0.159916
@@ -557,6 +646,14 @@ tokens.</p>
 ## 10      3       hirtäytyä sinne 1 0.015625 10.23462 0.159916</code></pre>
 <p>The top three bigrams with the highest tf-idf values in each
 document:</p>
+<pre class="r"><code>tfidf_2gram_top_3 &lt;- text_2gram_tfidf %&gt;%
+  group_by(fsd_id) %&gt;%
+  slice_max(order_by = tf_idf, n = 3) %&gt;%
+  mutate(tfidf_2grams = paste0(token, &quot;, &quot;, collapse = &quot;&quot;)) %&gt;%
+  select(fsd_id, tfidf_2grams) %&gt;%
+  filter(row_number()==1)
+
+head(tfidf_2gram_top_3, n=10)</code></pre>
 <pre><code>## # A tibble: 10 x 2
 ## # Groups:   fsd_id [10]
 ##    fsd_id tfidf_2grams                                                          
@@ -589,6 +686,20 @@ reference corpus are removed from the keyphrase list.</p>
 <p>The corpus is a massive file, so using the threshold of <span class="math inline">\(\epsilon=100\)</span> helps to make it more
 manageable. I add a row that includes rank. Ranks can be shared if
 frequency counts are equal.</p>
+<pre class="r"><code>#df &lt;- read.table(&quot;finnish_vocab.txt.gz&quot;, quote = &quot;&quot;, fill = TRUE, encoding=&quot;UTF-8&quot;)
+
+#ref_corpus &lt;- df %&gt;%
+#  #head(n=.1*nrow(df)) %&gt;%
+#  mutate(V1 = as.numeric(V1)) %&gt;%
+#  filter(!is.na(V1)) %&gt;%
+#  filter(V1 &gt;= 100) %&gt;%
+#  mutate(refRank = dense_rank(desc(V1)))
+
+#write.csv(ref_corpus,&quot;ref_corpus_sample.csv&quot;, row.names = FALSE)
+
+ref_corpus &lt;- read.csv(&quot;ref_corpus_sample.csv&quot;)
+
+ref_corpus %&gt;% arrange(desc(refRank)) %&gt;% head(10)</code></pre>
 <pre><code>##     V1         V2 refRank
 ## 1  100       &lt;d0&gt;   30166
 ## 2  100   zusammen   30166
@@ -602,7 +713,15 @@ frequency counts are equal.</p>
 ## 10 100 Zhengzhoun   30166</code></pre>
 <p>For the loneliness survey data, I calculate rank from the tf-idf
 dataframe, which includes word counts per response ID.</p>
+<pre class="r"><code>ranked &lt;- text_tf_idf %&gt;% arrange(doc_id, n) %&gt;%
+    group_by(doc_id) %&gt;% 
+    mutate(rank = dense_rank(desc(n))) %&gt;%
+    select(doc_id, token, n, rank) 
+    #filter(!is.na(word))
+
+#head(ranked)</code></pre>
 <p>Here I look at the ranks for document 3:</p>
+<pre class="r"><code>ranked %&gt;% filter(doc_id == 3) %&gt;% arrange(rank) %&gt;% head(10)</code></pre>
 <pre><code>## # A tibble: 10 x 4
 ## # Groups:   doc_id [1]
 ##    doc_id token            n  rank
@@ -632,6 +751,18 @@ value of the maximum rank for phrases of length n is used: <span class="math inl
 the phrases that have the smallest ratio are the best candidates for
 being a keyphrase.</p>
 <p>For each word in each document, I calculate the Likey ratio below</p>
+<pre class="r"><code>maxRank &lt;- max(ref_corpus$refRank)
+
+likeyScores &lt;- ranked %&gt;% 
+  left_join(select(ref_corpus, V2, refRank), by = c(&quot;token&quot; = &quot;V2&quot;)) %&gt;% #get refRank column from reference corpus
+  mutate(
+    likey = case_when(
+      is.na(refRank) ~ rank / (maxRank + 1),
+      TRUE ~ rank / refRank,
+    )
+  )
+
+head(likeyScores, n=10)</code></pre>
 <pre><code>## # A tibble: 10 x 6
 ## # Groups:   doc_id [1]
 ##    doc_id token            n  rank refRank     likey
@@ -647,6 +778,7 @@ being a keyphrase.</p>
 ##  9      3 jaksais          1     3   19209 0.000156 
 ## 10      3 joskus           1     3     209 0.0144</code></pre>
 <p>Take a look at the Likey ratios for just document 3.</p>
+<pre class="r"><code>likeyScores %&gt;% filter(doc_id == 3) %&gt;% arrange(likey)</code></pre>
 <pre><code>## # A tibble: 57 x 6
 ## # Groups:   doc_id [1]
 ##    doc_id token              n  rank refRank     likey
@@ -664,6 +796,15 @@ being a keyphrase.</p>
 ## # ... with 47 more rows</code></pre>
 <p>Then I select the keywords from the <em>n=5</em> words with the
 lowest Likey ratios, and compare them side-by-side with the tf-idf.</p>
+<pre class="r"><code>top_5 &lt;- likeyScores %&gt;%
+  group_by(doc_id) %&gt;%
+  slice_min(order_by = likey, n = 5) %&gt;%
+  mutate(likey_keywords = paste0(token, &quot;, &quot;, collapse = &quot;&quot;)) %&gt;%
+  select(doc_id, likey_keywords) %&gt;%
+  filter(row_number()==1) %&gt;%
+  left_join(tf_idf_top_5, by = &quot;doc_id&quot;)
+
+head(top_5, n=10)</code></pre>
 <pre><code>## # A tibble: 10 x 3
 ## # Groups:   doc_id [10]
 ##    doc_id likey_keywords                                          tfidf_keywords
@@ -678,12 +819,58 @@ lowest Likey ratios, and compare them side-by-side with the tf-idf.</p>
 ##  8     47 &quot;lapsiperheittäin, pariskunnittain, seurustellaan, suv~ &quot;lapsiperheit~
 ##  9     49 &quot;ämpärini, itseninäköistä, ko., ihmissuhteesta, väistä~ &quot;ämpärini, ih~
 ## 10     66 &quot;Eristäydyn, yksinäisyyttäni, itseinhoa, osattomaksi, ~ &quot;raivoa, osat~</code></pre>
+<pre class="r"><code>#top_5 %&gt;% filter(likey_keywords != &quot;NA, &quot;) %&gt;% head(20)</code></pre>
 <p>The ratio picks up capitalized words and misspelled words, since they
 don’t occur in the reference corpus.</p>
 <p>Should I repeat the process after converting to all lower-case? This
 might work here but not work for documents with proper nouns.</p>
 <p>The selected reference corpus does not allow to repeat for n-grams
 instead of individual words.</p>
+<p>I can look at the Likey ratios for each word across all responses.
+This might show the keywords from the survey as a whole.</p>
+<pre class="r"><code>df &lt;- tbl.text_export %&gt;%
+  filter(!is.na(q9))
+
+responseString &lt;- paste(df$q9, collapse = &quot; &quot;)
+
+rm(df)
+
+allResponses &lt;- data.frame(matrix(ncol = 2, nrow = 0))
+colnames(allResponses) &lt;- c(&quot;doc_id&quot;, &quot;allResponses&quot;)
+
+allResponses[nrow(allResponses) + 1, ] &lt;- c(&quot;all&quot;, responseString)
+
+
+allText &lt;- allResponses %&gt;% 
+  unnest_tokens(output = token, input = allResponses) %&gt;%
+  count(doc_id, token, sort = TRUE)
+
+
+allRanked &lt;- allText %&gt;% arrange(n) %&gt;%
+    mutate(rank = dense_rank(desc(n))) %&gt;%
+    select(doc_id, token, n, rank) 
+
+allLikey &lt;- allRanked %&gt;% 
+  left_join(select(ref_corpus, V2, refRank), by = c(&quot;token&quot; = &quot;V2&quot;)) %&gt;% #get refRank column from reference corpus
+  mutate(
+    likeyAcrossAll = case_when(
+      is.na(refRank) ~ rank / (maxRank + 1),
+      TRUE ~ rank / refRank,
+    )
+  )
+
+allLikey %&gt;% arrange(likeyAcrossAll) %&gt;% head(10)</code></pre>
+<pre><code>##    doc_id          token   n rank refRank likeyAcrossAll
+## 1     all    yksinäisyys 863    8   19702   0.0004060501
+## 2     all  yksinäisyyden 235   40   23092   0.0017322016
+## 3     all   yksinäiseksi 178   56   24789   0.0022590665
+## 4     all  yksinäisyyttä 182   55   21393   0.0025709344
+## 5     all   ahdistavalta 103   86   27124   0.0031706238
+## 6     all     yksinäinen 247   37   11083   0.0033384463
+## 7     all   surulliselta  77  105   27193   0.0038612878
+## 8     all yksinäisyyteen  75  107   26144   0.0040927173
+## 9     all       tyhjältä  74  108   24243   0.0044548942
+## 10    all yksinäisyyteni  46  135   29967   0.0045049555</code></pre>
 <p>Next steps:</p>
 <ul>
 <li>Find reference corpus for Finnish Internet parser with n-grams</li>
@@ -701,6 +888,26 @@ dataset?</li>
 <div id="yle-corpus" class="section level3">
 <h3>YLE Corpus</h3>
 <p>trying to create reference corpus from Yle news articles…</p>
+<pre class="r"><code>#library(xml2)
+#library(&quot;XML&quot;)
+#library(readr)
+
+#had to add a root doc to the file to read as XML
+#file.string &lt;- read_file(&quot;ylenews-fi-2011-2018-selko-s-vrt/ylenews-fi-2011-2018-selko-s-vrt/vrt/ylenews_fi_2011_2018_selko_s.vrt&quot;)
+
+#yle_xml &lt;- paste(&quot;&lt;doc&gt;&quot;, file.string, &quot;&lt;/doc&gt;&quot;)
+
+#yle &lt;- read_xml(yle_xml)
+
+#cannot read XML file...</code></pre>
+<pre class="r"><code>#converted yle xml to csv in Python
+
+yle &lt;- read.csv(&quot;yle_selko.csv&quot;, sep = &quot;\t&quot;, encoding=&quot;UTF-8&quot;)
+
+yle &lt;- yle %&gt;% 
+  filter(!grepl(&#39;Sunnuntai|Manantai|Tiistai|Keskiviikko|Torstai|Perjantai|Lauantai &#39;, originalSentence))
+
+head(yle)</code></pre>
 <pre><code>##                                                                       originalSentence
 ## 1                                                                    Päivän kysymykset
 ## 2                                                   He tekivät tutkimuksen Kuopiossa .
