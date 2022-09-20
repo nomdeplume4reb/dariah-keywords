@@ -11,7 +11,7 @@
 
 <meta name="author" content="Rachel Bryant" />
 
-<meta name="date" content="2022-09-05" />
+<meta name="date" content="2022-09-20" />
 
 <title>Exploratory Keyword Extraction Methods</title>
 
@@ -256,6 +256,7 @@ if (window.hljs) {
 
 
 
+
 <style type="text/css">
 .main-container {
   max-width: 940px;
@@ -276,6 +277,9 @@ button.code-folding-btn:focus {
 }
 summary {
   display: list-item;
+}
+details > summary > p:only-child {
+  display: inline;
 }
 pre code {
   padding: 0;
@@ -361,7 +365,7 @@ pre code {
 
 <h1 class="title toc-ignore">Exploratory Keyword Extraction Methods</h1>
 <h4 class="author">Rachel Bryant</h4>
-<h4 class="date">2022-09-05</h4>
+<h4 class="date">2022-09-20</h4>
 
 </div>
 
@@ -370,12 +374,12 @@ pre code {
 <pre class="r"><code>library(tidyverse) # use tidyverse packages
 library(tidytext) # text mining tools for tidyverse
 library(udpipe) # for conllu data
-library(tm) # other text mining tool package
-library(wordcloud) # visualize word clouds
-library(RColorBrewer) # for color paletter
-library(ggraph) # visualize network
-library(igraph) # visualize networks
-library(data.table) # data manipulation (from a  copypasted example)</code></pre>
+#library(tm) # other text mining tool package
+#library(wordcloud) # visualize word clouds
+#library(RColorBrewer) # for color paletter
+#library(ggraph) # visualize network
+#library(igraph) # visualize networks
+#library(data.table) # data manipulation (from a  copypasted example)</code></pre>
 <pre class="r"><code>tbl.raw &lt;- read.csv(&quot;HS-loneliness-survey/data/Study/Data/daF3360.csv&quot;, sep = &quot;;&quot;, encoding=&quot;UTF-8&quot;) %&gt;%
   mutate(q9 = trimws(q9),
          q18 = ifelse(q18 == &quot; &quot;, NA, q18)) %&gt;% # remove white space
@@ -416,9 +420,11 @@ externally.</p>
   mutate(paragraph_id = 1)
 
 tbl.annotated_neural_parser &lt;- tbl.annotated_neural_parser %&gt;% 
-  mutate(across(&#39;doc_id&#39;, str_replace, &#39;doc&#39;, &#39;&#39;),
-         doc_id = as.numeric(doc_id)
-         )
+  mutate(
+      doc_id = gsub(&#39;doc&#39;, &#39;&#39;, doc_id),
+      #across(&#39;doc_id&#39;, str_replace, &#39;doc&#39;, &#39;&#39;),
+      doc_id = as.numeric(doc_id)
+  )
 
 head(tbl.annotated_neural_parser)</code></pre>
 <pre><code>##   doc_id paragraph_id sentence_id
@@ -594,19 +600,19 @@ highest tf-idf values in each document.</p>
   filter(row_number()==1)
 
 head(tf_idf_top_5, n=10)</code></pre>
-<pre><code>## # A tibble: 10 x 2
+<pre><code>## # A tibble: 10 × 2
 ## # Groups:   doc_id [10]
 ##    doc_id tfidf_keywords                                                        
 ##     &lt;dbl&gt; &lt;chr&gt;                                                                 
-##  1      3 &quot;et, kavereita, erakoituu, huvittais, jaksais, käytiin, lukua, potkii~
+##  1      3 &quot;et, kavereita, erakoituu, huvittais, jaksais, käytiin, lukua, potkii…
 ##  2      5 &quot;kakalta, &quot;                                                           
 ##  3     10 &quot;ollakseen, näistä, yksinäistä, yksi, liian, &quot;                        
 ##  4     11 &quot;miltään, Ei, &quot;                                                       
 ##  5     13 &quot;parempiosaisia, ainoat, itsemurha, viha, katkeruus, pyörivät, &quot;      
 ##  6     18 &quot;koko, koostunut, lomakkeen, Ollut, parinkymmenen, pistin, reilun, &quot;  
-##  7     26 &quot;oli, elämessäni, hylännyt, konkreetisestikin, kykyjensä, palautumaan~
-##  8     47 &quot;lapsiperheittäin, pariskunnittain, suvussani, seurustellaan, oudoksi~
-##  9     49 &quot;ämpärini, ihmissuhteesta, itseninäköistä, ko., määrää, muodon, saman~
+##  7     26 &quot;oli, elämessäni, hylännyt, konkreetisestikin, kykyjensä, palautumaan…
+##  8     47 &quot;lapsiperheittäin, pariskunnittain, suvussani, seurustellaan, oudoksi…
+##  9     49 &quot;ämpärini, ihmissuhteesta, itseninäköistä, ko., määrää, muodon, saman…
 ## 10     66 &quot;raivoa, osattomaksi, huonommaksi, Liian, Eristäydyn, itseinhoa, &quot;</code></pre>
 <p>Each word that with the same frequency gets the same tf-idf value.
 Perhaps for short texts like survey responses, words are quite likely to
@@ -616,24 +622,27 @@ words from the document.</p>
 <ul>
 <li>Add min threshold for word frequency</li>
 <li>Verify that the results are correct</li>
+<li>Could document collection of tf-idf be changed to reference corpus?
+Instead of comparing to all responses, compare to reference corpus?</li>
 </ul>
 <p>I repeat the process with n-grams instead of individual word
 tokens.</p>
 <p>Some bigrams for document 3:</p>
 <pre class="r"><code>text_2grams &lt;- tbl.text_export %&gt;% 
   unnest_ngrams(output = token, input = q9, n=2) %&gt;%
-  count(fsd_id, token, sort = TRUE)
+  mutate(doc_id = fsd_id) %&gt;%
+  count(doc_id, token, sort = TRUE)
 
 text_2gram_tfidf &lt;- text_2grams %&gt;%
-  bind_tf_idf(term = token, document = fsd_id, n)
+  bind_tf_idf(term = token, document = doc_id, n)
 
 #remove rows with special characters and numbers. Should I do this?
 text_2gram_tfidf &lt;- text_2gram_tfidf %&gt;% 
   filter(grepl(&#39;^[a-zA-ZäöüÄÖÜ]&#39;, token))
 
 text_2gram_tfidf %&gt;%
-  arrange(fsd_id, desc(tf_idf)) %&gt;% head(10)</code></pre>
-<pre><code>##    fsd_id                 token n       tf      idf   tf_idf
+  arrange(doc_id, desc(tf_idf)) %&gt;% head(10)</code></pre>
+<pre><code>##    doc_id                 token n       tf      idf   tf_idf
 ## 1       3                 et ei 2 0.031250 10.23462 0.319832
 ## 2       3 ajattelemaan maailman 1 0.015625 10.23462 0.159916
 ## 3       3            ei jaksais 1 0.015625 10.23462 0.159916
@@ -647,27 +656,27 @@ text_2gram_tfidf %&gt;%
 <p>The top three bigrams with the highest tf-idf values in each
 document:</p>
 <pre class="r"><code>tfidf_2gram_top_3 &lt;- text_2gram_tfidf %&gt;%
-  group_by(fsd_id) %&gt;%
+  group_by(doc_id) %&gt;%
   slice_max(order_by = tf_idf, n = 3) %&gt;%
   mutate(tfidf_2grams = paste0(token, &quot;, &quot;, collapse = &quot;&quot;)) %&gt;%
-  select(fsd_id, tfidf_2grams) %&gt;%
+  select(doc_id, tfidf_2grams) %&gt;%
   filter(row_number()==1)
 
 head(tfidf_2gram_top_3, n=10)</code></pre>
-<pre><code>## # A tibble: 10 x 2
-## # Groups:   fsd_id [10]
-##    fsd_id tfidf_2grams                                                          
+<pre><code>## # A tibble: 10 × 2
+## # Groups:   doc_id [10]
+##    doc_id tfidf_2grams                                                          
 ##     &lt;int&gt; &lt;chr&gt;                                                                 
-##  1      3 &quot;et ei, ajattelemaan maailman, ei jaksais, eikä huvittais, eikä kyken~
+##  1      3 &quot;et ei, ajattelemaan maailman, ei jaksais, eikä huvittais, eikä kyken…
 ##  2     10 &quot;liian yksinäistä, ollakseen yksi, yksinäistä ollakseen, &quot;            
 ##  3     11 &quot;ei miltään, &quot;                                                        
-##  4     13 &quot;ainoat mielessä, itsemurha katkeruus, ja viha, katkeruus ja, mieless~
-##  5     18 &quot;ainoa syy, ajan ainoa, antanut periksi, edes erota, edes yhden, erot~
-##  6     26 &quot;ainoa vaihtoehto, auttoivat saamaan, ei hylännyt, elämänhalun palaut~
-##  7     47 &quot;häpeä siitä, ja suvussani, joka paikassa, kun joka, lapsiperheittäin~
-##  8     49 &quot;aika pieni, aikoja kerrallaan, alkanut elää, ämpärini on, arvostan i~
-##  9     66 &quot;enkä onnistu, häpeän yksinäisyyttäni, helposti kotiini, huonommaksi ~
-## 10     67 &quot;ajatella kuten, elämän hitaus, haluaa elämän, hitaus ja, ja kiireett~</code></pre>
+##  4     13 &quot;ainoat mielessä, itsemurha katkeruus, ja viha, katkeruus ja, mieless…
+##  5     18 &quot;ainoa syy, ajan ainoa, antanut periksi, edes erota, edes yhden, erot…
+##  6     26 &quot;ainoa vaihtoehto, auttoivat saamaan, ei hylännyt, elämänhalun palaut…
+##  7     47 &quot;häpeä siitä, ja suvussani, joka paikassa, kun joka, lapsiperheittäin…
+##  8     49 &quot;aika pieni, aikoja kerrallaan, alkanut elää, ämpärini on, arvostan i…
+##  9     66 &quot;enkä onnistu, häpeän yksinäisyyttäni, helposti kotiini, huonommaksi …
+## 10     67 &quot;ajatella kuten, elämän hitaus, haluaa elämän, hitaus ja, ja kiireett…</code></pre>
 <p>N-grams seem to be A LOT less readable than single words.</p>
 </div>
 <div id="likey-unsupervised-language-independent-keyphrase-extraction" class="section level3">
@@ -677,6 +686,10 @@ selects the words and phrases that best capture the meaning of documents
 by comparing ranks of frequencies in the documents to those in a
 reference corpus.</p>
 <p><strong>Choosing a reference corpus</strong></p>
+<ul>
+<li>What qualities does the reference corpus need to have? Should it be
+long? domain specific? similar to natural language?</li>
+</ul>
 <p>Turku NLP offers a mass-scale <a href="https://turkunlp.org/finnish_nlp.html">corpus</a> of Internet
 Finnish with automatic syntactic analysis that includes about 3.7
 billion tokens. It includes punctuation as well as proper nouns.</p>
@@ -722,7 +735,7 @@ dataframe, which includes word counts per response ID.</p>
 #head(ranked)</code></pre>
 <p>Here I look at the ranks for document 3:</p>
 <pre class="r"><code>ranked %&gt;% filter(doc_id == 3) %&gt;% arrange(rank) %&gt;% head(10)</code></pre>
-<pre><code>## # A tibble: 10 x 4
+<pre><code>## # A tibble: 10 × 4
 ## # Groups:   doc_id [1]
 ##    doc_id token            n  rank
 ##     &lt;dbl&gt; &lt;chr&gt;        &lt;int&gt; &lt;int&gt;
@@ -763,37 +776,37 @@ likeyScores &lt;- ranked %&gt;%
   )
 
 head(likeyScores, n=10)</code></pre>
-<pre><code>## # A tibble: 10 x 6
+<pre><code>## # A tibble: 10 × 6
 ## # Groups:   doc_id [1]
 ##    doc_id token            n  rank refRank     likey
 ##     &lt;dbl&gt; &lt;chr&gt;        &lt;int&gt; &lt;int&gt;   &lt;int&gt;     &lt;dbl&gt;
 ##  1      3 aikaa            1     3     128 0.0234   
 ##  2      3 ajattelemaan     1     3    5249 0.000572 
 ##  3      3 auki             1     3     995 0.00302  
-##  4      3 elämään          1     3    1123 0.00267  
+##  4      3 elämään          1     3   29396 0.000102 
 ##  5      3 erakoituu        1     3   30145 0.0000995
-##  6      3 hektistä         1     3   26591 0.000113 
+##  6      3 hektistä         1     3      NA 0.0000994
 ##  7      3 hirtäytyä        1     3      NA 0.0000994
 ##  8      3 huvittais        1     3   29033 0.000103 
 ##  9      3 jaksais          1     3   19209 0.000156 
 ## 10      3 joskus           1     3     209 0.0144</code></pre>
 <p>Take a look at the Likey ratios for just document 3.</p>
 <pre class="r"><code>likeyScores %&gt;% filter(doc_id == 3) %&gt;% arrange(likey)</code></pre>
-<pre><code>## # A tibble: 57 x 6
+<pre><code>## # A tibble: 57 × 6
 ## # Groups:   doc_id [1]
 ##    doc_id token              n  rank refRank     likey
 ##     &lt;dbl&gt; &lt;chr&gt;          &lt;int&gt; &lt;int&gt;   &lt;int&gt;     &lt;dbl&gt;
-##  1      3 hirtäytyä          1     3      NA 0.0000994
-##  2      3 erakoituu          1     3   30145 0.0000995
-##  3      3 huvittais          1     3   29033 0.000103 
-##  4      3 paskalta           1     3   28044 0.000107 
-##  5      3 hektistä           1     3   26591 0.000113 
-##  6      3 yksinäisyyteen     1     3   26144 0.000115 
-##  7      3 ranteet            1     3   26031 0.000115 
-##  8      3 potkii             1     3   21810 0.000138 
-##  9      3 jaksais            1     3   19209 0.000156 
-## 10      3 lukua              1     3   12469 0.000241 
-## # ... with 47 more rows</code></pre>
+##  1      3 elämä              2     2   29168 0.0000686
+##  2      3 eikä               2     2   20159 0.0000992
+##  3      3 hektistä           1     3      NA 0.0000994
+##  4      3 hirtäytyä          1     3      NA 0.0000994
+##  5      3 yksinäisyyteen     1     3      NA 0.0000994
+##  6      3 erakoituu          1     3   30145 0.0000995
+##  7      3 metsään            1     3   30060 0.0000998
+##  8      3 kylässä            1     3   29899 0.000100 
+##  9      3 käytiin            1     3   29832 0.000101 
+## 10      3 vetää              1     3   29758 0.000101 
+## # … with 47 more rows</code></pre>
 <p>Then I select the keywords from the <em>n=5</em> words with the
 lowest Likey ratios, and compare them side-by-side with the tf-idf.</p>
 <pre class="r"><code>top_5 &lt;- likeyScores %&gt;%
@@ -805,20 +818,21 @@ lowest Likey ratios, and compare them side-by-side with the tf-idf.</p>
   left_join(tf_idf_top_5, by = &quot;doc_id&quot;)
 
 head(top_5, n=10)</code></pre>
-<pre><code>## # A tibble: 10 x 3
+<pre><code>## # A tibble: 10 × 3
 ## # Groups:   doc_id [10]
-##    doc_id likey_keywords                                          tfidf_keywords
-##     &lt;dbl&gt; &lt;chr&gt;                                                   &lt;chr&gt;         
-##  1      3 &quot;hirtäytyä, erakoituu, huvittais, paskalta, hektistä, &quot; &quot;et, kavereit~
-##  2      5 &quot;kakalta, &quot;                                             &quot;kakalta, &quot;   
-##  3     10 &quot;yksinäistä, ollakseen, näistä, liian, yksi, &quot;          &quot;ollakseen, n~
-##  4     11 &quot;miltään, Ei, &quot;                                         &quot;miltään, Ei,~
-##  5     13 &quot;parempiosaisia, Pahalta, katkeruus, itsemurha, viha, &quot; &quot;parempiosais~
-##  6     18 &quot;koostunut, Ollut, yksinäisyyttä, ikäni, parinkymmenen~ &quot;koko, koostu~
-##  7     26 &quot;elämessäni, konkreetisestikin, syystalvena, tuekseni,~ &quot;oli, elämess~
-##  8     47 &quot;lapsiperheittäin, pariskunnittain, seurustellaan, suv~ &quot;lapsiperheit~
-##  9     49 &quot;ämpärini, itseninäköistä, ko., ihmissuhteesta, väistä~ &quot;ämpärini, ih~
-## 10     66 &quot;Eristäydyn, yksinäisyyttäni, itseinhoa, osattomaksi, ~ &quot;raivoa, osat~</code></pre>
+##    doc_id likey_keywords                                                 tfidf…¹
+##     &lt;dbl&gt; &lt;chr&gt;                                                          &lt;chr&gt;  
+##  1      3 &quot;elämä, eikä, hektistä, hirtäytyä, yksinäisyyteen, &quot;           &quot;et, k…
+##  2      5 &quot;kakalta, &quot;                                                    &quot;kakal…
+##  3     10 &quot;yksinäistä, näistä, ollakseen, liian, yksi, &quot;                 &quot;ollak…
+##  4     11 &quot;miltään, Ei, &quot;                                                &quot;miltä…
+##  5     13 &quot;pyörivät, parempiosaisia, mielessä, Pahalta, päivä, &quot;         &quot;parem…
+##  6     18 &quot;ikäni, yksinäisyyttä, ystävän, elämäni, ystäviä, &quot;            &quot;koko,…
+##  7     26 &quot;elämänhalun, elämessäni, hylännyt, hylkäsivät, konkreetisest… &quot;oli, …
+##  8     47 &quot;Häpeä, lapsiperheittäin, pariskunnittain, perhettä, seuruste… &quot;lapsi…
+##  9     49 &quot;ihmisiä, ehkä, ämpärini, itseninäköistä, väistämättäkin, yks… &quot;ämpär…
+## 10     66 &quot;elän, Eristäydyn, Häpeän, yksinäisenä, yksinäisyyttäni, &quot;     &quot;raivo…
+## # … with abbreviated variable name ¹​tfidf_keywords</code></pre>
 <pre class="r"><code>#top_5 %&gt;% filter(likey_keywords != &quot;NA, &quot;) %&gt;% head(20)</code></pre>
 <p>The ratio picks up capitalized words and misspelled words, since they
 don’t occur in the reference corpus.</p>
@@ -860,61 +874,366 @@ allLikey &lt;- allRanked %&gt;%
   )
 
 allLikey %&gt;% arrange(likeyAcrossAll) %&gt;% head(10)</code></pre>
-<pre><code>##    doc_id          token   n rank refRank likeyAcrossAll
-## 1     all    yksinäisyys 863    8   19702   0.0004060501
-## 2     all  yksinäisyyden 235   40   23092   0.0017322016
-## 3     all   yksinäiseksi 178   56   24789   0.0022590665
-## 4     all  yksinäisyyttä 182   55   21393   0.0025709344
-## 5     all   ahdistavalta 103   86   27124   0.0031706238
-## 6     all     yksinäinen 247   37   11083   0.0033384463
-## 7     all   surulliselta  77  105   27193   0.0038612878
-## 8     all yksinäisyyteen  75  107   26144   0.0040927173
-## 9     all       tyhjältä  74  108   24243   0.0044548942
-## 10    all yksinäisyyteni  46  135   29967   0.0045049555</code></pre>
+<pre><code>##    doc_id         token    n rank refRank likeyAcrossAll
+## 1     all   yksinäisyys  863    8      NA   0.0002651904
+## 2     all          että 1322    4    4114   0.0009722897
+## 3     all         siltä  254   34   28640   0.0011871508
+## 4     all    yksinäinen  247   37      NA   0.0012265058
+## 5     all        ketään  237   38   29560   0.0012855210
+## 6     all yksinäisyyden  235   40      NA   0.0013259522
+## 7     all       ystäviä  213   44   30002   0.0014665689
+## 8     all          sitä  321   24   14317   0.0016763288
+## 9     all yksinäisyyttä  182   55      NA   0.0018231843
+## 10    all  yksinäiseksi  178   56      NA   0.0018563331</code></pre>
+<pre class="r"><code>compareLikeyScores &lt;- likeyScores %&gt;% 
+  left_join(select(allLikey, token, likeyAcrossAll), by = &quot;token&quot;) 
+
+compareLikeyScores %&gt;% filter(doc_id == 3) %&gt;% arrange(likey) %&gt;% head(10)</code></pre>
+<pre><code>## # A tibble: 10 × 7
+## # Groups:   doc_id [1]
+##    doc_id token              n  rank refRank     likey likeyAcrossAll
+##     &lt;dbl&gt; &lt;chr&gt;          &lt;int&gt; &lt;int&gt;   &lt;int&gt;     &lt;dbl&gt;          &lt;dbl&gt;
+##  1      3 elämä              2     2   29168 0.0000686        0.00309
+##  2      3 eikä               2     2   20159 0.0000992        0.00208
+##  3      3 hektistä           1     3      NA 0.0000994        0.00593
+##  4      3 hirtäytyä          1     3      NA 0.0000994        0.00593
+##  5      3 yksinäisyyteen     1     3      NA 0.0000994        0.00355
+##  6      3 erakoituu          1     3   30145 0.0000995        0.00597
+##  7      3 metsään            1     3   30060 0.0000998        0.00592
+##  8      3 kylässä            1     3   29899 0.000100         0.00585
+##  9      3 käytiin            1     3   29832 0.000101         0.00603
+## 10      3 vetää              1     3   29758 0.000101         0.00588</code></pre>
+<p><strong>Comparing Reference corpora</strong></p>
+<p>The Kielipankki has a corpus of sets of unigrams, bigrams and
+trigrams extracted by the University of Helsinki from the source data of
+the Finnish Sub-corpus of the Newspaper and Periodical Corpus of the
+National Library of Finland. The corpus is <a href="http://urn.fi/urn:nbn:fi:lb-2014073038">here</a>.</p>
+<p>I use only the unigrams and bigrams, and I have to clip them at the
+threshold of 100, so that the files are manageable. Otherwise, they’re
+too big to read.</p>
+<pre class="r"><code>file &lt;- read.csv(&quot;klk_fi_unigrams_all/FNC1/klk_fi_1grams_all&quot;, sep = &quot;&quot;, quote=&quot;&quot;, encoding=&quot;UTF-8&quot;, nrows=1500000, header = FALSE)
+
+ref_1grams &lt;- file %&gt;%
+  mutate(V1 = as.numeric(V1)) %&gt;%
+  filter(!is.na(V1)) %&gt;%
+  filter(V1 &gt;= 100) %&gt;%
+  mutate(refRank = dense_rank(desc(V1)))
+
+rm(file)
+
+ref_1grams %&gt;% arrange(desc(refRank)) %&gt;% head(10)</code></pre>
+<pre><code>##     V1         V2 refRank
+## 1  100    ✓toreja   33504
+## 2  100      ■■••■   33504
+## 3  100     ■■-■■■   33504
+## 4  100         ■q   33504
+## 5  100        ■ns   33504
+## 6  100        ■mä   33504
+## 7  100       ■mat   33504
+## 8  100       ■^■■   33504
+## 9  100        ■So   33504
+## 10 100 ■Sementtiä   33504</code></pre>
+<p>This reference corpus does have an affect on the Likey ratios, but at
+first glance it doesn’t seem too substantial.</p>
+<pre class="r"><code>maxRankNews &lt;- max(ref_1grams$refRank)
+
+likeyScoresNews &lt;- ranked %&gt;% 
+  left_join(select(ref_1grams, V2, refRank), by = c(&quot;token&quot; = &quot;V2&quot;)) %&gt;% #get refRank column from reference corpus
+  mutate(
+    likey = case_when(
+      is.na(refRank) ~ rank / (maxRankNews + 1),
+      TRUE ~ rank / refRank,
+    )
+  )
+
+#head(likeyScoresNews, n=10)
+
+likeyScoresNews %&gt;% filter(doc_id == 3) %&gt;% arrange(likey)</code></pre>
+<pre><code>## # A tibble: 57 × 6
+## # Groups:   doc_id [1]
+##    doc_id token         n  rank refRank     likey
+##     &lt;dbl&gt; &lt;chr&gt;     &lt;int&gt; &lt;int&gt;   &lt;int&gt;     &lt;dbl&gt;
+##  1      3 kavereita     2     2   32265 0.0000620
+##  2      3 erakoituu     1     3      NA 0.0000895
+##  3      3 hektistä      1     3      NA 0.0000895
+##  4      3 hirtäytyä     1     3      NA 0.0000895
+##  5      3 huvittais     1     3      NA 0.0000895
+##  6      3 jaksais       1     3      NA 0.0000895
+##  7      3 paskalta      1     3      NA 0.0000895
+##  8      3 ranteet       1     3   33079 0.0000907
+##  9      3 potkii        1     3   31983 0.0000938
+## 10      3 yms           1     3   30829 0.0000973
+## # … with 47 more rows</code></pre>
+<p>I compare them side-by-side.</p>
+<pre class="r"><code>top_5 &lt;- likeyScoresNews %&gt;%
+  group_by(doc_id) %&gt;%
+  slice_min(order_by = likey, n = 5) %&gt;%
+  mutate(likey_news = paste0(token, &quot;, &quot;, collapse = &quot;&quot;)) %&gt;%
+  select(doc_id, likey_news) %&gt;%
+  filter(row_number()==1) %&gt;%
+  left_join(top_5, by = &quot;doc_id&quot;) %&gt;%
+  rename(likey_internet = likey_keywords)
+
+compareScores &lt;- tbl.text_export %&gt;% mutate(doc_id = as.numeric(fsd_id)) %&gt;%
+  select(doc_id, q9) %&gt;%
+  left_join(top_5, by = &quot;doc_id&quot;) %&gt;%
+  filter(!is.na(q9))
+
+#write.csv(compare,&quot;comaredLikeyScores.csv&quot;, row.names = FALSE)
+
+head(compareScores, n=10)</code></pre>
+<pre><code>##    doc_id
+## 1       3
+## 2       5
+## 3      10
+## 4      11
+## 5      13
+## 6      18
+## 7      26
+## 8      47
+## 9      49
+## 10     66
+##                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     q9
+## 1                                                                                                                           vois vetää ranteet auki tai mennä metsään ja hirtäytyä sinne puuhun.. elämä tuntuu vaan välillä täysin paskalta et ei jaksais eikä huvittais mikään, yksinäisyyteen tosin tottuu ja erakoituu, sen kanssa oppii elämään kyllä, mut sit joskus taas elämä potkii päähän eikä kykene ajattelemaan.. maailman meno on liian hektistä et ei ole aikaa tavata kavereita, sukua.. miettii -80 lukua niin käytiin kylässä ja oli kavereita yms...
+## 2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              kakalta
+## 3                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             liian yksinäistä, ollakseen yksi näistä.
+## 4                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           Ei miltään
+## 5                                                                                                                                                                                                                                                                                                                                                                                                                                                           Pahalta. Joka päivä ainoat mielessä pyörivät asiat on itsemurha, katkeruus ja viha parempiosaisia kohtaan.
+## 6                                                                                                                                                                                                                                                                  Ollut ilman ystäviä koko ikäni ja perhe on antanut periksi jo kauan sitten. Nykyään en oikein  edes erota yksinäisyyttä vaan se on se tunne mistä koko elämäni on koostunut koko reilun parinkymmenen vuoden ajan. Ainoa syy miksi pistin edes yhden ystävän oli se että voisin lähettää lomakkeen.
+## 7                                                                                                                  Siskoni ja useimmat ystäväni hylkäsivät minut viime syystalvena kun minulla oli erittäin vaikea tilanne elämessäni ja tuntui että kuolema oli enää ainoa vaihtoehto. Joulun aika oli erityisen vaikea. Onneksi oli yksi ystävä joka ei hylännyt ja hän jaksoi kuunnella ja tukea konkreetisestikin. Sitten pari muutakin ystävää tuli tuekseni kykyjensä mukaan.  Nämä ystävät ja rukous auttoivat saamaan elämänhalun palautumaan jossakin määrin.
+## 8                                                                                                                                                                                                                                                                                                                                                                                                                               Tuntee olonsa oudoksi, kun joka paikassa seurustellaan pariskunnittain ja suvussani lapsiperheittäin. Häpeä siitä, ettei ole perhettä.
+## 9  Sosiaalinen &quot;ämpärini&quot; on kai aika pieni: tapaan mielelläni ihmisiä, mutta en ehkä valtavan usein tai pitkiä aikoja kerrallaan. Viihdyn myös hyvin yksin. Yksi syy yksinäisyyteen on ehkä se, että arvostan ihmissuhteissa enemmän laatua kuin määrää. En oikeastaan välitä olla ihmisten kanssa &quot;muodon vuoksi&quot;, jos tuntuu, etten oikein saa ko. ihmissuhteesta tarpeeksi. Olen myös alkanut elää mahdollisimman itseninäköistä elämää. Tällöin joutuu väistämättäkin etsimään sellaisia uusia ihmisiä ympärille, joilla olisi samanlaiset kiinnostuksen kohteet.
+## 10                                                                                                                                                                                                                                            Häpeän yksinäisyyttäni  ja sitä, että elän yksin enkä onnistu löytämään kumppania. Tunnen itseni muita huonommaksi ja osattomaksi. Tämä taas aiheuttaa katkeruutta ja itseinhoa, masennusta ja raivoa. Eristäydyn helposti kotiini. Liian yksinäisenä en pysty olemaan kenenkään seurassa, ihmisen tarve on liian suuri.
+##                                                                    likey_news
+## 1   kavereita, erakoituu, hektistä, hirtäytyä, huvittais, jaksais, paskalta, 
+## 2                                                                   kakalta, 
+## 3                                yksinäistä, ollakseen, näistä, liian, yksi, 
+## 4                                                               miltään, Ei, 
+## 5                   Pahalta, parempiosaisia, pyörivät, katkeruus, itsemurha, 
+## 6                       koostunut, lomakkeen, periksi, ikäni, yksinäisyyttä, 
+## 7             elämessäni, konkreetisestikin, tuekseni, syystalvena, Siskoni, 
+## 8      lapsiperheittäin, pariskunnittain, suvussani, seurustellaan, oudoksi, 
+## 9  ämpärini, ihmissuhteesta, itseninäköistä, väistämättäkin, ihmissuhteissa, 
+## 10               Eristäydyn, itseinhoa, yksinäisyyttäni, masennusta, Häpeän, 
+##                                                                                         likey_internet
+## 1                                                   elämä, eikä, hektistä, hirtäytyä, yksinäisyyteen, 
+## 2                                                                                            kakalta, 
+## 3                                                         yksinäistä, näistä, ollakseen, liian, yksi, 
+## 4                                                                                        miltään, Ei, 
+## 5                                                 pyörivät, parempiosaisia, mielessä, Pahalta, päivä, 
+## 6                                                    ikäni, yksinäisyyttä, ystävän, elämäni, ystäviä, 
+## 7  elämänhalun, elämessäni, hylännyt, hylkäsivät, konkreetisestikin, kykyjensä, syystalvena, ystävää, 
+## 8                                  Häpeä, lapsiperheittäin, pariskunnittain, perhettä, seurustellaan, 
+## 9                            ihmisiä, ehkä, ämpärini, itseninäköistä, väistämättäkin, yksinäisyyteen, 
+## 10                                            elän, Eristäydyn, Häpeän, yksinäisenä, yksinäisyyttäni, 
+##                                                                                                    tfidf_keywords
+## 1                      et, kavereita, erakoituu, huvittais, jaksais, käytiin, lukua, potkii, puuhun, sit, sukua, 
+## 2                                                                                                       kakalta, 
+## 3                                                                    ollakseen, näistä, yksinäistä, yksi, liian, 
+## 4                                                                                                   miltään, Ei, 
+## 5                                                  parempiosaisia, ainoat, itsemurha, viha, katkeruus, pyörivät, 
+## 6                                              koko, koostunut, lomakkeen, Ollut, parinkymmenen, pistin, reilun, 
+## 7  oli, elämessäni, hylännyt, konkreetisestikin, kykyjensä, palautumaan, rukous, Siskoni, syystalvena, tuekseni, 
+## 8                                          lapsiperheittäin, pariskunnittain, suvussani, seurustellaan, oudoksi, 
+## 9                    ämpärini, ihmissuhteesta, itseninäköistä, ko., määrää, muodon, samanlaiset, väistämättäkin, 
+## 10                                               raivoa, osattomaksi, huonommaksi, Liian, Eristäydyn, itseinhoa,</code></pre>
+<p>Bigrams in reference corpus. Again I use the same threshold <span class="math inline">\(\epsilon=100\)</span>.</p>
+<pre class="r"><code>file &lt;- read.csv(&quot;klk_fi_bigrams_all/FNC1/klk_fi_2grams_all&quot;, sep = &quot;&quot;, quote=&quot;&quot;, encoding=&quot;UTF-8&quot;, nrows=4000000, header = FALSE)
+
+#tail(file, n=10)
+
+ref_2grams &lt;- file %&gt;%
+  mutate(V1 = as.numeric(V1), token = paste(V2, V3)) %&gt;%
+  filter(!is.na(V1)) %&gt;%
+  filter(V1 &gt;= 100) %&gt;%
+  select(V1, token) %&gt;%
+  mutate(refRank = dense_rank(desc(V1)))
+
+rm(file)
+
+ref_2grams %&gt;% arrange(desc(refRank)) %&gt;% tail(10)</code></pre>
+<pre><code>##               V1   token refRank
+## 3411661  5776725     . ,      10
+## 3411662  6299965     _ _       9
+## 3411663  6384374 , mutta       8
+## 3411664  6557589     » »       7
+## 3411665  6797753     p .       6
+## 3411666  7516225    , ja       5
+## 3411667  8310607  , joka       4
+## 3411668 15664208     . –       3
+## 3411669 16557128     . .       2
+## 3411670 20582571  , että       1</code></pre>
+<p>Likey Ratio for bigrams</p>
+<pre class="r"><code>ranked_2grams &lt;- text_2gram_tfidf %&gt;% arrange(doc_id, n) %&gt;%
+    group_by(doc_id) %&gt;% 
+    mutate(rank = dense_rank(desc(n))) %&gt;%
+    select(doc_id, token, n, rank) 
+
+maxRankNews2grams &lt;- max(ref_2grams$refRank)
+
+likeyScores2grams &lt;- ranked_2grams %&gt;% 
+  left_join(select(ref_2grams, token, refRank), by = &quot;token&quot;) %&gt;% #get refRank column from reference corpus
+  mutate(
+    likey = case_when(
+      is.na(refRank) ~ rank / (maxRankNews2grams + 1),
+      TRUE ~ rank / refRank,
+    )
+  )
+
+#head(likeyScoresNews, n=10)
+
+likeyScores2grams %&gt;% filter(doc_id == 3) %&gt;% arrange(likey)</code></pre>
+<pre><code>## # A tibble: 62 × 6
+## # Groups:   doc_id [1]
+##    doc_id token                     n  rank refRank     likey
+##     &lt;int&gt; &lt;chr&gt;                 &lt;int&gt; &lt;int&gt;   &lt;int&gt;     &lt;dbl&gt;
+##  1      3 et ei                     2     1   28817 0.0000347
+##  2      3 aikaa tavata              1     2      NA 0.0000683
+##  3      3 ajattelemaan maailman     1     2      NA 0.0000683
+##  4      3 ei jaksais                1     2      NA 0.0000683
+##  5      3 eikä huvittais            1     2      NA 0.0000683
+##  6      3 elämä potkii              1     2      NA 0.0000683
+##  7      3 elämään kyllä             1     2      NA 0.0000683
+##  8      3 erakoituu sen             1     2      NA 0.0000683
+##  9      3 hektistä et               1     2      NA 0.0000683
+## 10      3 hirtäytyä sinne           1     2      NA 0.0000683
+## # … with 52 more rows</code></pre>
 <p>Next steps:</p>
 <ul>
 <li>Find reference corpus for Finnish Internet parser with n-grams</li>
+<li>compatibility with Joni’s pipeline</li>
+<li>Evaluation</li>
 <li>How to setup pipeline so that it’s not specific to this
 dataset?</li>
 <li>Is threshold correct? Compare to other thresholds</li>
 <li>Should other reference corpora be tried?</li>
 <li>Repeat process with lemma instead?</li>
+<li>how to process in Puhti</li>
 </ul>
 </div>
 <div id="evaluation" class="section level3">
 <h3>Evaluation</h3>
 <p>How to determine if keywords are accurate?</p>
-</div>
-<div id="yle-corpus" class="section level3">
-<h3>YLE Corpus</h3>
-<p>trying to create reference corpus from Yle news articles…</p>
-<pre class="r"><code>#library(xml2)
-#library(&quot;XML&quot;)
-#library(readr)
+<p>Calculate precision (P), recall (R) and Fmeasure (F) for top 5, 10,
+and 15 keyphrase candidates for each method</p>
+<p>optimize on these metrics instead of arbitrarily choosing n
+keywords</p>
+<ul>
+<li>evaluataion against human labeled data
+<ul>
+<li>needs a scoring system</li>
+<li>clear instructions for scorers (identify all keywords? ranked? top
+15?)</li>
+<li>find humans to score (experts? students?)</li>
+<li>evaluate scorers (intercoder reliability)</li>
+</ul></li>
+<li>already labed data?
+<ul>
+<li>tagged data</li>
+<li>what kinds of surveys are already tagged?</li>
+<li>Wikipedia ref corpus as already labeled data?</li>
+<li>abstracts from scientific articles already tagged?</li>
+</ul></li>
+<li>against some kind of performance or interaction?
+<ul>
+<li>improves application performance; would need some application</li>
+</ul></li>
+</ul>
+<p>Until I figure out a labeled dataset as the “correct” keywords, I’m
+using the internet parsebank as the correct set and the newspaper
+parsebank as the test set.</p>
+<p>For each word in each document, I have to classify whether or not it
+is a keyphrase according according to the likey ratio that uses the news
+dataset or the likey ratio that uses the internet dataset. As usual, if
+the word is in the (arbitrary) top 5 key-phrases, it gets a 1, otherwise
+it gets a 0.</p>
+<pre class="r"><code>thresholdInternet &lt;- likeyScores %&gt;%
+  group_by(doc_id) %&gt;%
+  arrange(likey) %&gt;%
+  summarize(likeyThreshold = nth(likey, 5)) %&gt;%
+  ungroup()
 
-#had to add a root doc to the file to read as XML
-#file.string &lt;- read_file(&quot;ylenews-fi-2011-2018-selko-s-vrt/ylenews-fi-2011-2018-selko-s-vrt/vrt/ylenews_fi_2011_2018_selko_s.vrt&quot;)
+thresholdNews &lt;- likeyScoresNews %&gt;%
+  group_by(doc_id) %&gt;%
+  arrange(likey) %&gt;%
+  summarize(likeyThreshold = nth(likey, 5)) %&gt;%
+  ungroup()
 
-#yle_xml &lt;- paste(&quot;&lt;doc&gt;&quot;, file.string, &quot;&lt;/doc&gt;&quot;)
+keywordsInternet &lt;-  likeyScores %&gt;%
+  left_join(thresholdInternet, by = &quot;doc_id&quot;) %&gt;%
+  mutate(isKeywordInternet = case_when(
+    likey &lt;= likeyThreshold ~ 1,
+    likey &gt; likeyThreshold ~ 0
+    )) %&gt;%
+  select(doc_id, token, isKeywordInternet)
 
-#yle &lt;- read_xml(yle_xml)
+keywordsNews &lt;-  likeyScoresNews %&gt;%
+  left_join(thresholdNews, by = &quot;doc_id&quot;) %&gt;%
+  mutate(isKeywordNews = case_when(
+    likey &lt;= likeyThreshold ~ 1,
+    likey &gt; likeyThreshold ~ 0
+    )) %&gt;%
+  select(doc_id, token, isKeywordNews)
 
-#cannot read XML file...</code></pre>
-<pre class="r"><code>#converted yle xml to csv in Python
+compareKeywords &lt;- keywordsInternet %&gt;%
+  full_join(keywordsNews, by = c(&quot;doc_id&quot;, &quot;token&quot;))
 
-yle &lt;- read.csv(&quot;yle_selko.csv&quot;, sep = &quot;\t&quot;, encoding=&quot;UTF-8&quot;)
+head(compareKeywords, n = 10) </code></pre>
+<pre><code>## # A tibble: 10 × 4
+## # Groups:   doc_id [1]
+##    doc_id token        isKeywordInternet isKeywordNews
+##     &lt;dbl&gt; &lt;chr&gt;                    &lt;dbl&gt;         &lt;dbl&gt;
+##  1      3 aikaa                        0             0
+##  2      3 ajattelemaan                 0             0
+##  3      3 auki                         0             0
+##  4      3 elämään                      0             0
+##  5      3 erakoituu                    0             1
+##  6      3 hektistä                     1             1
+##  7      3 hirtäytyä                    1             1
+##  8      3 huvittais                    0             1
+##  9      3 jaksais                      0             1
+## 10      3 joskus                       0             0</code></pre>
+<p>From the classification, I can create a confusion matrix.</p>
+<pre class="r"><code>#library(caret)
 
-yle &lt;- yle %&gt;% 
-  filter(!grepl(&#39;Sunnuntai|Manantai|Tiistai|Keskiviikko|Torstai|Perjantai|Lauantai &#39;, originalSentence))
+cm &lt;- caret::confusionMatrix(
+  data=factor(compareKeywords$isKeywordNews),
+  reference=factor(compareKeywords$isKeywordInternet)
+  )
 
-head(yle)</code></pre>
-<pre><code>##                                                                       originalSentence
-## 1                                                                    Päivän kysymykset
-## 2                                                   He tekivät tutkimuksen Kuopiossa .
-## 3                                             Vihreät pois hallituksesta ( 21.9.2014 )
-## 4                           Hyvä asia on , että ihminen ei saa Ebola-tautia helposti .
-## 5 Miehet katsovat televisiota , lukevat kirjaa ja joskus nukkuvat päiväunet sohvalla .
-## 6                                                              ( Lukija Pertti Seppä )</code></pre>
+print(cm)</code></pre>
+<pre><code>## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction     0     1
+##          0 57185  6206
+##          1  4564  8605
+##                                           
+##                Accuracy : 0.8593          
+##                  95% CI : (0.8568, 0.8618)
+##     No Information Rate : 0.8065          
+##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
+##                                           
+##                   Kappa : 0.5294          
+##                                           
+##  Mcnemar&#39;s Test P-Value : &lt; 2.2e-16       
+##                                           
+##             Sensitivity : 0.9261          
+##             Specificity : 0.5810          
+##          Pos Pred Value : 0.9021          
+##          Neg Pred Value : 0.6534          
+##              Prevalence : 0.8065          
+##          Detection Rate : 0.7469          
+##    Detection Prevalence : 0.8280          
+##       Balanced Accuracy : 0.7535          
+##                                           
+##        &#39;Positive&#39; Class : 0               
+## </code></pre>
+<pre class="r"><code>precision &lt;- cm$byClass[&#39;Pos Pred Value&#39;]    
+recall &lt;- cm$byClass[&#39;Sensitivity&#39;]
+fscore &lt;- 2 * ((precision * recall) / (precision + recall))</code></pre>
+<p>The precision is 0.9020997 and recall is 0.9260879 and f-score is
+0.9139364.</p>
 </div>
 </div>
 
